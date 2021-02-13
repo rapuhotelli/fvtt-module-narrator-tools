@@ -69,6 +69,9 @@ const NarratorTools = {
 		for ([c, rgx] of Object.entries(commands)) {
 			match = content.match(rgx);
 			if (match) {
+				if (c === 'narrate') {
+					this._emitAndSelf({ command: 'narration', content: match[2]})
+				}
 				this.createChatMessage(c, match[2]);
 				return false;
 			}
@@ -270,7 +273,7 @@ const NarratorTools = {
 		this.elements.content[0].style.top = '0px';
 		this.elements.BG[0].style.opacity = '1';
 		this.elements.content[0].style.opacity = '1';
-		let scroll = this.elements.content.height() - 310;
+		let scroll = height - 310;
 		clearTimeout(this._timeouts.narrationScrolls);
 		if (scroll > 0) {
 			this._timeouts.narrationScrolls = setTimeout(() => {
@@ -301,6 +304,7 @@ const NarratorTools = {
 	 * @param data Command and value to be addressed by the corresponding function
 	 */
 	_onMessage(data) {
+		const self = this;
 		const commands = {
 			scenery: function () {
 				NarratorTools.sharedState.scenery = data.value;
@@ -308,6 +312,9 @@ const NarratorTools = {
 			},
 			style: function () {
 				NarratorTools._updateContentStyle();
+			},
+			narration: function() {
+				self.openNarrator(data.content)
 			},
 			update: function () {
 				if (game.user.isGM) {
@@ -317,6 +324,21 @@ const NarratorTools = {
 		};
 		commands[data.command]();
 	},
+
+	_emitAndSelf(commandData) {
+		game.socket.emit('module.narrator-tools', commandData);
+		this._onMessage(commandData)
+	},
+
+	openNarrator(content) {
+		let duration = this.messageDuration(content.length);
+		clearTimeout(this._timeouts.narrationCloses);
+		this.elements.content[0].style.opacity = '0';
+		this._timeouts.narrationOpens = setTimeout(this._narrationOpen.bind(this, content, duration), 500);
+		this._timeouts.narrationCloses = setTimeout(this._narrationClose.bind(this), duration);
+	},
+
+
 	/**
 	 * Renders the chat message and sets out the message behavior
 	 * @param message Message object to be rendered
@@ -330,15 +352,6 @@ const NarratorTools = {
 			html[0].classList.add('narrator-chat');
 			if (html.find('.narration').length) {
 				html[0].classList.add('narrator-narrative');
-				const timestamp = new Date().getTime();
-				if (message.data.timestamp + 2000 > timestamp) {
-					const content = $(message.data.content)[0].textContent;
-					let duration = this.messageDuration(content.length);
-					clearTimeout(this._timeouts.narrationCloses);
-					this.elements.content[0].style.opacity = '0';
-					this._timeouts.narrationOpens = setTimeout(this._narrationOpen.bind(this, content, duration), 500);
-					this._timeouts.narrationCloses = setTimeout(this._narrationClose.bind(this), duration);
-				}
 			} else {
 				html[0].classList.add('narrator-description');
 			}
