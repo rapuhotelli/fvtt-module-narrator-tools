@@ -70,9 +70,10 @@ const NarratorTools = {
 			match = content.match(rgx);
 			if (match) {
 				if (c === 'narrate') {
-					this._emitAndSelf({ command: 'narration', content: match[2]})
+					this.narrate(match[2])
+				} else {
+					this.createChatMessage(c, match[2]);
 				}
-				this.createChatMessage(c, match[2]);
 				return false;
 			}
 		}
@@ -150,7 +151,7 @@ const NarratorTools = {
 					name: 'Narrate',
 					action: () => {
 						const selection = NarratorTools._getSelectionText();
-						if (selection) NarratorTools.chatMessage.narrate(selection);
+						if (selection) NarratorTools.narrate(selection);
 					},
 				},
 			],
@@ -314,7 +315,7 @@ const NarratorTools = {
 				NarratorTools._updateContentStyle();
 			},
 			narration: function() {
-				self.openNarrator(data.content)
+				self.showNarratorLocal(data.content)
 			},
 			update: function () {
 				if (game.user.isGM) {
@@ -323,19 +324,6 @@ const NarratorTools = {
 			},
 		};
 		commands[data.command]();
-	},
-
-	_emitAndSelf(commandData) {
-		game.socket.emit('module.narrator-tools', commandData);
-		this._onMessage(commandData)
-	},
-
-	openNarrator(content) {
-		let duration = this.messageDuration(content.length);
-		clearTimeout(this._timeouts.narrationCloses);
-		this.elements.content[0].style.opacity = '0';
-		this._timeouts.narrationOpens = setTimeout(this._narrationOpen.bind(this, content, duration), 500);
-		this._timeouts.narrationCloses = setTimeout(this._narrationClose.bind(this), duration);
 	},
 
 
@@ -414,6 +402,18 @@ const NarratorTools = {
 		this.elements.frameBG[0].style.opacity = this.sharedState.scenery ? '1' : '0';
 		this.elements.sidebarBG[0].style.opacity = this.sharedState.scenery ? '1' : '0';
 	},
+
+	/**
+	 * Socket emitters ignore the sending client, this runs the message 
+	 * listener for everybody and the current client
+	 * @param commandData Event payload { command: string, ...rest }
+	 */
+	_emitAndSelf(commandData) {
+		if (!game.user.isGM) return
+		game.socket.emit('module.narrator-tools', commandData);
+		this._onMessage(commandData)
+	},
+
 	/**Shortcut object for creating chat messages */
 	chatMessage: {
 		/**
@@ -431,6 +431,37 @@ const NarratorTools = {
 			return NarratorTools.createChatMessage('describe', message);
 		},
 	},
+
+	/**
+	 * Run the chat+overlay narration for everybody
+	 * @param content Text to display in chat and narration overlay
+	 */
+	narrate(content) {
+		this.chatMessage.narrate(content);
+		this.showNarratorAll(content)
+	},
+
+	/**
+	 * Show only the narration overlay to all clients
+	 * @param content Text to display in the narration overlay
+	 */
+	showNarratorAll(content) {
+		this._emitAndSelf({ command: 'narration', content: content })
+	},
+
+	/**
+	 * Show only the narration overlay to just the current client
+	 * @param content Text to display in the narration overlay
+	 */
+	showNarratorLocal(content) {
+		let duration = this.messageDuration(content.length);
+		clearTimeout(this._timeouts.narrationCloses);
+		this.elements.content[0].style.opacity = '0';
+		this._timeouts.narrationOpens = setTimeout(this._narrationOpen.bind(this, content, duration), 500);
+		this._timeouts.narrationCloses = setTimeout(this._narrationClose.bind(this), duration);
+	},
+
+
 	/**
 	 * Create a chat message of the specified type
 	 * @param type     'narrate' for narrations or anything else for descriptions
